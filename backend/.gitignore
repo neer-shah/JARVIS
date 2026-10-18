@@ -1,0 +1,4 @@
+.env
+.spotify_cache
+calendar.json
+__pycache__/
