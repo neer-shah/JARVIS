@@ -1,4 +1,5 @@
 """JARVIS Streamlit frontend. Run from the project root:  streamlit run frontend/app.py"""
+import queue
 import sys
 import threading
 from datetime import datetime
@@ -65,6 +66,42 @@ def listen_once() -> str | None:
     return Listener().listen()
 
 
+class WakeService:
+    """Background 'hey jarvis' loop: wake word -> listen -> queue the heard text for the UI."""
+
+    def __init__(self):
+        self.heard: queue.Queue[str] = queue.Queue()
+        self.enabled = threading.Event()
+        self.status = "off"
+        self.error: str | None = None
+        threading.Thread(target=self._run, daemon=True).start()
+
+    def _run(self) -> None:
+        try:
+            from jarvis.io.stt import Listener
+            from jarvis.io.wake import WakeWord
+
+            wake, listener = WakeWord(), Listener()
+        except Exception as e:
+            self.error = str(e)
+            return
+        while True:
+            self.enabled.wait()
+            self.status = "waiting"
+            if not wake.wait(should_stop=lambda: not self.enabled.is_set()):
+                self.status = "off"
+                continue
+            self.status = "listening"
+            heard = listener.listen()
+            if heard:
+                self.heard.put(heard)
+
+
+@st.cache_resource
+def get_wake() -> WakeService:
+    return WakeService()
+
+
 try:
     brain = get_brain()
 except Exception as e:
@@ -85,6 +122,28 @@ with st.sidebar:
     st.caption(datetime.now().strftime("%A %d %B %Y"))
 
     voice_out = st.toggle("Speak replies", value=False)
+    wake_on = st.toggle('Wake word ("Hey JARVIS")', value=True)
+    wake = get_wake()
+    if wake_on:
+        wake.enabled.set()
+    else:
+        wake.enabled.clear()
+
+    @st.fragment(run_every=1)
+    def wake_poller():
+        if wake.error:
+            st.caption(f"Wake word unavailable: {wake.error}")
+            return
+        if wake_on:
+            st.caption("Listening..." if wake.status == "listening" else 'Say "Hey JARVIS"')
+        try:
+            heard = wake.heard.get_nowait()
+        except queue.Empty:
+            return
+        st.session_state.pending = heard
+        st.rerun()
+
+    wake_poller()
 
     st.markdown("### MODULES")
     for env in brain.environments:
