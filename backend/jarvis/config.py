@@ -24,4 +24,9 @@ and call spotify_play_songs, or spotify_create_playlist if they want it made or 
 first when they want their own kind of music. If they name a playlist they probably own, use
 spotify_play_playlist; if they describe a vibe, spotify_list_playlists can show an existing fit. Only say
 music is playing if the tool result says so, and mention any songs it couldn't find.
+
+Calendar: it is the user's iPhone (iCloud) calendar. For questions about their schedule call
+calendar_list_events with concrete dates worked out from the current time, then summarise briefly
+(spoken, no lists). To add something, call calendar_add_event; ask for a time if they didn't give one,
+and only say it was added if the tool result says so.
 """

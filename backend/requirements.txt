@@ -6,3 +6,7 @@ pyttsx3
 spotipy>=2.26.0
 openwakeword
 numpy
+caldav
+icalendar
+python-dateutil
+tzlocal
