@@ -1,84 +1,48 @@
-import functools
-import time
-from datetime import datetime
+from collections.abc import Callable
 
-from google import genai
-from google.genai import errors
-from google.genai import types
-
-from . import config
-from .environments import discover
+from . import config, llm
+from .agents import Agent
+from .agents import discover as discover_agents
+from .environments import discover as discover_environments
 from .environments.base import Environment
 
 
-def _safe(fn):
-    """Log each tool call and turn exceptions into text the model can relay."""
-
-    @functools.wraps(fn)
-    def wrapper(*args, **kwargs):
-        print(f"[tool] {fn.__name__}({kwargs or args})")
-        try:
-            return fn(*args, **kwargs)
-        except Exception as e:
-            print(f"[tool] {fn.__name__} failed: {e!r}")
-            return f"Error: {e}"
-
-    return wrapper
-
-
 class Brain:
-    """Gemini with all discovered environments' tools attached.
+    """JARVIS's main model. It routes each request to a domain agent, a fast-path tool or a plain tool.
 
-    Gemini decides which tool(s) to call; the SDK executes them and feeds results back
-    (automatic function calling), then returns the final spoken-style reply.
+    Domain agents (Spotify, Calendar, ...) are exposed as one function each, `<name>_agent(request)`,
+    so JARVIS never sees their internal tools. Simple commands (pause, skip, volume) are given to
+    JARVIS directly via each agent's fast tools to skip the second model call.
     """
 
-    def __init__(self, environments: list[Environment] | None = None):
+    def __init__(self, agents: list[Agent] | None = None, environments: list[Environment] | None = None):
         if not config.GEMINI_API_KEY:
             raise ValueError("GOOGLE_GENAI_API_KEY is not set (see .env).")
-        self.client = genai.Client(api_key=config.GEMINI_API_KEY)
-        self.environments = environments if environments is not None else discover()
+        self.agents = agents if agents is not None else discover_agents()
+        self.environments = environments if environments is not None else discover_environments()
 
-        tools, seen = [], set()
+        tools: list[Callable[..., str]] = []
+        for agent in self.agents:
+            tools.append(llm.safe(agent.as_tool(), label="agent"))
+            tools.extend(agent.fast_tools())  # already wrapped by the agent
         for env in self.environments:
-            for fn in env.tools():
-                if fn.__name__ in seen:
-                    raise ValueError(f"Duplicate tool name '{fn.__name__}' in environment '{env.name}'")
-                seen.add(fn.__name__)
-                tools.append(_safe(fn))
-        print(f"[brain] environments: {[e.name for e in self.environments]}, tools: {sorted(seen)}")
+            tools.extend(llm.safe(fn) for fn in env.tools())
 
-        self.chat = self.client.chats.create(
-            model=config.MODEL,
-            config=types.GenerateContentConfig(
-                system_instruction=config.SYSTEM_PROMPT,
-                tools=tools or None,
-                thinking_config=types.ThinkingConfig(thinking_budget=0),  # faster replies,
-                temperature=0.4
-            ),
-        )
+        names = [fn.__name__ for fn in tools]
+        duplicates = sorted({n for n in names if names.count(n) > 1})
+        if duplicates:
+            raise ValueError(f"Duplicate tool names: {duplicates}")
+        self.tool_names = names
+        print(f"[brain] agents: {[a.name for a in self.agents]}, tools: {sorted(names)}")
 
-    @staticmethod
-    def _stamp(text: str) -> str:
-        """Models don't know the time, so tell it with every message (saves a tool call)."""
-        return f"[Current local time: {datetime.now():%A %d %B %Y, %H:%M}]\n{text}"
+        self.chat = llm.make_chat(config.SYSTEM_PROMPT, tools, config.MODEL)
+
+    def modules(self) -> dict[str, list[str]]:
+        """Module name -> tool names, for display. Agents list their internal tools."""
+        shown = {a.name: [fn.__name__ for fn in a.tools()] for a in self.agents}
+        shown.update({e.name: [fn.__name__ for fn in e.tools()] for e in self.environments})
+        return shown
 
     def ask(self, text: str) -> str:
         """Send one user utterance; returns the reply to speak. Conversation history is kept."""
-        for attempt in range(4):
-            try:
-                return (self.chat.send_message(self._stamp(text)).text or "Done.").strip()
-            except errors.APIError as e:
-                if e.code == 429 and "PerDay" in str(e):  # retrying can't help until the quota resets
-                    return "I've used up today's free Gemini quota, so I can't think until it resets."
-                # 503 = Google overloaded, 429 = free-tier rate limit: both usually clear up quickly
-                if e.code in (429, 503) and attempt < 3:
-                    wait = 2 ** attempt
-                    print(f"[brain] {e.code}, retrying in {wait}s")
-                    time.sleep(wait)
-                    continue
-                if e.code in (429, 503):
-                    return "Google's servers are overloaded right now. Please try again in a moment."
-                return f"Sorry, I hit a problem: {e}"
-            except Exception as e:
-                return f"Sorry, I hit a problem: {e}"
+        return llm.send(self.chat, text, who="brain")

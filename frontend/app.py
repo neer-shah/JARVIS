@@ -146,9 +146,9 @@ with st.sidebar:
     wake_poller()
 
     st.markdown("### MODULES")
-    for env in brain.environments:
-        names = "".join(f'<span class="tool-chip">{fn.__name__}</span>' for fn in env.tools())
-        with st.expander(env.name.upper()):
+    for module, tool_names in brain.modules().items():
+        names = "".join(f'<span class="tool-chip">{name}</span>' for name in tool_names)
+        with st.expander(module.upper()):
             st.markdown(names, unsafe_allow_html=True)
 
     st.markdown("### QUICK ACTIONS")

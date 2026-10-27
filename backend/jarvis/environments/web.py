@@ -28,7 +28,7 @@ class Web(Environment):
             """
             client = genai.Client(api_key=config.GEMINI_API_KEY)
             resp = client.models.generate_content(
-                model=config.MODEL,
+                model=config.MODEL or "",
                 contents=f"Answer briefly (two sentences max) using web search: {query}",
                 config=types.GenerateContentConfig(
                     tools=[types.Tool(google_search=types.GoogleSearch())],
