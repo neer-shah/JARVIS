@@ -5,7 +5,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from .base import Environment
+from ...environments.base import Environment
 
 DJ_URI = "spotify:playlist:37i9dQZF1EYkqdzj48dyYq"  # Spotify's AI DJ
 SCOPES = (
@@ -66,7 +66,7 @@ class Spotify(Environment):
                     client_secret=os.getenv("SPOTIFY_CLIENT_SECRET"),
                     redirect_uri=os.getenv("SPOTIFY_REDIRECT_URI"),
                     scope=SCOPES,
-                    cache_path=str(Path(__file__).resolve().parents[2] / ".spotify_cache"),
+                    cache_path=str(Path(__file__).resolve().parents[3] / ".spotify_cache"),
                 )
             )
         return self._sp
@@ -82,9 +82,7 @@ class Spotify(Environment):
     def _pick_device(self):
         """The active device, else this PC's Spotify app. Never an idle phone or speaker."""
         devices = self.sp.devices()["devices"]
-        chosen = next((d for d in devices if d["is_active"]), None) or next(
-            (d for d in devices if d["type"] == "Computer"), None
-        )
+        chosen = next((d for d in devices if d["is_active"]), None) or next((d for d in devices if d["type"] == "Computer"), None)
         return chosen["id"] if chosen else None
 
     def _ensure_open(self):
@@ -196,13 +194,13 @@ class Spotify(Environment):
                 query: What to play, e.g. 'Bohemian Rhapsody by Queen', 'Dark Side of the Moon', 'Radiohead'.
                 kind: 'track' (default, a single song), 'album', 'artist' or 'podcast'.
             """
-            kind = PLAY_KINDS.get(kind.lower().strip())
-            if not kind:
+            search_kind = PLAY_KINDS.get(kind.lower().strip())
+            if not search_kind:
                 return "kind must be track, album, artist or podcast."
-            item = self._find(query, kind)
+            item = self._find(query, search_kind)
             if not item:
-                return f"No {kind} found for '{query}'."
-            if kind == "track":
+                return f"No {search_kind} found for '{query}'."
+            if search_kind == "track":
                 self._play(uris=[item["uri"]])
             else:
                 self._play(context_uri=item["uri"])
@@ -325,9 +323,7 @@ class Spotify(Environment):
             artists = self.sp.current_user_top_artists(limit=10, time_range="medium_term")["items"]
             tracks = self.sp.current_user_top_tracks(limit=10, time_range="medium_term")["items"]
             recent = self.sp.current_user_recently_played(limit=10)["items"]
-            top_artists = "; ".join(
-                a["name"] + (f" ({', '.join(a['genres'][:2])})" if a.get("genres") else "") for a in artists
-            )
+            top_artists = "; ".join(a["name"] + (f" ({', '.join(a['genres'][:2])})" if a.get("genres") else "") for a in artists)
             return (
                 f"Top artists: {top_artists}.\n"
                 f"Top songs: {'; '.join(self._label(t) for t in tracks)}.\n"

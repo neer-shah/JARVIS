@@ -2,12 +2,12 @@ import os
 import threading
 import uuid
 from concurrent.futures import ThreadPoolExecutor
-from datetime import date, datetime, timedelta
+from datetime import datetime, timedelta
 
 import tzlocal
 from dateutil import tz
 
-from .base import Environment
+from ...environments.base import Environment
 
 URL = "https://caldav.icloud.com/"
 LOCAL_TZ = tzlocal.get_localzone()  # a real IANA zone (e.g. Europe/London), so iCloud reads it and DST is handled
@@ -35,7 +35,11 @@ def _describe(summary, start, end, all_day, location, calendar_name) -> str:
         last = end - timedelta(days=1)  # all-day DTEND is exclusive
         when = day + (f" to {last:%A %d %B}" if last.date() > start.date() else "") + ", all day"
     else:
-        when = f"{day}, {start:%H:%M} to {end:%H:%M}" if end.date() == start.date() else f"{day} {start:%H:%M} to {end:%A %d %B %H:%M}"
+        when = (
+            f"{day}, {start:%H:%M} to {end:%H:%M}"
+            if end.date() == start.date()
+            else f"{day} {start:%H:%M} to {end:%A %d %B %H:%M}"
+        )
     extra = (f" at {location}" if location else "") + (f" [{calendar_name}]" if calendar_name else "")
     return f"{summary}: {when}{extra}"
 
@@ -161,7 +165,8 @@ class Calendar(Environment):
                 repeat: Optional 'daily', 'weekly', 'monthly' or 'yearly'.
                 repeat_until: Optional last day of the repeat, YYYY-MM-DD. Empty repeats forever.
             """
-            from icalendar import Alarm, Calendar as ICal, Event
+            from icalendar import Alarm, Event
+            from icalendar import Calendar as ICal
 
             s = _parse(start, "start")
             all_day = all_day or "T" not in start
@@ -188,10 +193,12 @@ class Calendar(Environment):
                 freq = REPEATS.get(repeat.lower().strip())
                 if not freq:
                     return "repeat must be daily, weekly, monthly or yearly."
-                rule = {"freq": freq}
+                rule: dict[str, object] = {"freq": freq}
                 if repeat_until:
                     until = _parse(repeat_until, "repeat_until").date()
-                    rule["until"] = until if all_day else datetime.combine(until, datetime.max.time(), tzinfo=LOCAL_TZ).astimezone(tz.UTC)
+                    rule["until"] = (
+                        until if all_day else datetime.combine(until, datetime.max.time(), tzinfo=LOCAL_TZ).astimezone(tz.UTC)
+                    )
                 ev.add("rrule", rule)
             if alert_minutes_before >= 0:
                 alarm = Alarm()
