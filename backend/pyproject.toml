@@ -1,0 +1,15 @@
+[tool.pytest.ini_options]
+testpaths = ["tests", "jarvis/agents"]
+
+[tool.ruff]
+line-length = 130
+target-version = "py312"
+
+[tool.mypy]
+python_version = "3.12"
+ignore_missing_imports = true
+files = ["jarvis", "main.py"]
+
+[tool.ruff.lint]
+# Tools and agents deliberately catch every exception and return a friendly message instead of a stack trace.
+ignore = ["BLE001"]
