@@ -1,12 +1,12 @@
 # JARVIS
-A voice and chat assistant powered by Google Gemini.
+A voice and chat assistant. JARVIS's brain is Anthropic Claude (`claude-opus-5-5`); the domain agents run on Google Gemini.
 
 ## How it's structured
-JARVIS's main model routes each request to a **domain agent**. Each agent is a smaller model with
+JARVIS's main model (Claude) routes each request to a **domain agent**. Each agent is a smaller Gemini model with
 its own prompt, chat history and tools. JARVIS only sees one tool per agent.
 
 ```
-JARVIS (backend/jarvis/brain.py, JARVIS_MODEL)
+JARVIS (backend/jarvis/brain.py, Claude claude-opus-5-5 via backend/jarvis/claude_chat.py)
  ├─ spotify_agent(request)   backend/jarvis/agents/spotify/
  ├─ calendar_agent(request)  backend/jarvis/agents/calendar/
  ├─ fast tools: spotify_pause, spotify_resume, spotify_next, spotify_previous,
@@ -33,7 +33,8 @@ cp .env.example .env   # then fill it in
 ```
 
 Environment variables, all in `backend/.env`:
-- `GOOGLE_GENAI_API_KEY`, `JARVIS_MODEL`: required.
+- `ANTHROPIC_API_KEY`: required. JARVIS's brain.
+- `GOOGLE_GENAI_API_KEY`, `JARVIS_MODEL`: required. The Gemini key and the model for the agents.
 - `JARVIS_AGENT_MODEL`: optional model for the agents. It defaults to `JARVIS_MODEL`.
 - `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET`, `SPOTIFY_REDIRECT_URI`: for the Spotify agent.
 - `APPLE_ACCOUNT_EMAIL`, `APPLE_CALENDAR_PASSWORD`: for the calendar agent.

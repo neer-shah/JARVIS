@@ -3,12 +3,13 @@ from collections.abc import Callable
 from . import config, llm
 from .agents import Agent
 from .agents import discover as discover_agents
+from .claude_chat import ClaudeChat
 from .environments import discover as discover_environments
 from .environments.base import Environment
 
 
 class Brain:
-    """JARVIS's main model. It routes each request to a domain agent, a fast-path tool or a plain tool.
+    """JARVIS's main model (Claude). It routes each request to a domain agent, a fast-path tool or a plain tool.
 
     Domain agents (Spotify, Calendar, ...) are exposed as one function each, `<name>_agent(request)`,
     so JARVIS never sees their internal tools. Simple commands (pause, skip, volume) are given to
@@ -16,8 +17,8 @@ class Brain:
     """
 
     def __init__(self, agents: list[Agent] | None = None, environments: list[Environment] | None = None):
-        if not config.GEMINI_API_KEY:
-            raise ValueError("GOOGLE_GENAI_API_KEY is not set (see .env).")
+        if not config.ANTHROPIC_API_KEY:
+            raise ValueError("ANTHROPIC_API_KEY is not set (see .env).")
         self.agents = agents if agents is not None else discover_agents()
         self.environments = environments if environments is not None else discover_environments()
 
@@ -35,7 +36,7 @@ class Brain:
         self.tool_names = names
         print(f"[brain] agents: {[a.name for a in self.agents]}, tools: {sorted(names)}")
 
-        self.chat = llm.make_chat(config.SYSTEM_PROMPT, tools, config.MODEL)
+        self.chat = ClaudeChat(config.SYSTEM_PROMPT, tools, config.BRAIN_MODEL)
 
     def modules(self) -> dict[str, list[str]]:
         """Module name -> tool names, for display. Agents list their internal tools."""
@@ -45,4 +46,4 @@ class Brain:
 
     def ask(self, text: str) -> str:
         """Send one user utterance; returns the reply to speak. Conversation history is kept."""
-        return llm.send(self.chat, text, who="brain")
+        return self.chat.send(text)

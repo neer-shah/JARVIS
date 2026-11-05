@@ -1,4 +1,5 @@
 google-genai
+anthropic>=2.5
 python-dotenv
 SpeechRecognition
 PyAudio

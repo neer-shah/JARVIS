@@ -117,13 +117,14 @@ class Spotify(Environment):
         return wrapper
 
     def _play(self, **target):
-        """start_playback on the chosen device. Retries a 404, which a just-launched app gives while still waking up."""
+        """start_playback on the chosen device. Retries a 404 (a just-launched app is still waking up)
+        and a 503 (Spotify's own transient overload), both of which usually clear within a few seconds."""
         for attempt in range(3):
             try:
                 return self.sp.start_playback(device_id=self._dev, **target)
             except Exception as e:
-                if getattr(e, "http_status", None) == 404 and attempt < 2:
-                    time.sleep(1.5)
+                if getattr(e, "http_status", None) in (404, 503) and attempt < 2:
+                    time.sleep(1.5 * (attempt + 1))
                     continue
                 raise
 
@@ -207,8 +208,9 @@ class Spotify(Environment):
             return f"Playing {self._label(item)}."
 
         def spotify_play_playlist(name: str) -> str:
-            """Play a playlist by the name the user said: one of their own, Liked Songs, or any Spotify
-            playlist. If there's no exact match it plays the closest one; the result says which, so tell the user.
+            """Play one of the user's OWN playlists (or Liked Songs) by the name they said. Only playlists in
+            their library are searched, never other people's or Spotify's. If there's no exact match it plays
+            the closest one of theirs; the result says which, so tell the user.
 
             Args:
                 name: The playlist name as the user said it, e.g. 'gym', 'liked songs'.
@@ -221,17 +223,12 @@ class Spotify(Environment):
                     self._play(uris=[i["track"]["uri"] for i in items])
                     return "Playing your Liked Songs."
             match = self._best_playlist(want, self._my_playlists())
-            from_library = match is not None
             if not match:
-                match = self._find(name, "playlist")
-            if not match:
-                return f"I couldn't find any playlist like '{name}'."
+                return f"I couldn't find a playlist called '{name}' in your library."
             self._play(context_uri=match["uri"])
             if match["name"].lower() == want:
                 return f"Playing {match['name']}."
-            if from_library:
-                return f"I couldn't find '{name}' exactly, so I'm playing your closest playlist, '{match['name']}'."
-            return f"You have no playlist like '{name}', so I'm playing the Spotify playlist '{match['name']}'."
+            return f"I couldn't find '{name}' exactly, so I'm playing your closest playlist, '{match['name']}'."
 
         def spotify_play_dj() -> str:
             """Start Spotify's AI DJ, the personalised voice-guided radio. Use for 'play DJ', 'put on the DJ'."""
