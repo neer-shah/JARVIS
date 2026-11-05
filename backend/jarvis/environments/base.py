@@ -18,9 +18,9 @@ class Environment(ABC):
 
     @abstractmethod
     def tools(self) -> list[Callable]:
-        """Plain Python functions Gemini may call.
+        """Plain Python functions the model may call.
 
-        Gemini builds the tool schema from each function's name, type hints and docstring,
+        Claude builds the tool schema from each function's name, type hints and docstring,
         so write a clear docstring (what it does, what each arg means) and use globally
         unique names, e.g. `spotify_play`, not `play`. Return a short string describing
         the outcome; it is passed back to the model.

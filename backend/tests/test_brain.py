@@ -17,7 +17,7 @@ def test_fast_tool_runs_without_a_sub_agent_chat(chats):
     pause = next(fn for fn in chats[0].tools if fn.__name__ == "music_pause")
     assert pause() == "Paused."
     assert agent.toolset.calls == ["pause"]
-    assert len(chats) == 1  # only JARVIS's own chat, no agent chat was created
+    assert len(chats) == 1  # only the brain's own chat: no domain agent chat was created
     assert brain.modules() == {"music": ["music_pause", "music_make_playlist", "music_broken"]}
 
 
@@ -29,10 +29,12 @@ def test_duplicate_tool_names_are_rejected(chats):
 def test_ask_returns_model_text(chats):
     brain = Brain(agents=[], environments=[])
     assert brain.ask("hello") == "ok"
-    assert chats[0].sent[0].endswith("hello")
+    assert chats[0].sent[0] == "hello"
 
 
-def test_echoed_time_stamp_is_not_spoken(chats):
-    brain = Brain(agents=[], environments=[])
-    chats[0].reply = "[20:27] You have nothing on tomorrow."
-    assert brain.ask("what's on?") == "You have nothing on tomorrow."
+def test_brain_needs_an_anthropic_key(chats, monkeypatch):
+    from jarvis import config
+
+    monkeypatch.setattr(config, "ANTHROPIC_API_KEY", None)
+    with pytest.raises(ValueError, match="ANTHROPIC_API_KEY"):
+        Brain(agents=[], environments=[])

@@ -19,7 +19,8 @@ def test_agent_forwards_request_and_keeps_one_chat(chats):
     assert tool("add five more") == "ok"
     assert len(chats) == 1  # follow-ups reuse the same history
     chat = chats[0]
-    assert chat.sent[0].endswith("make a chill playlist") and chat.sent[0].startswith("[Current local time:")
+    assert chat.sent == ["make a chill playlist", "add five more"]
+    assert chat.model == "claude-haiku-5-5"
     assert chat.system_prompt.startswith("You play music.") and AGENT_RULES in chat.system_prompt
     assert [fn.__name__ for fn in chat.tools] == ["music_pause", "music_make_playlist", "music_broken"]
 
@@ -38,22 +39,3 @@ def test_unknown_fast_tool_name_is_caught():
 
     with pytest.raises(ValueError, match="unknown fast tools"):
         Typo(FakeToolset()).tools()
-
-
-def test_agent_retries_less_than_brain(chats, monkeypatch):
-    from google.genai import errors
-
-    from jarvis import llm
-
-    monkeypatch.setattr(llm.time, "sleep", lambda s: None)
-    agent = FakeAgent()
-    agent.run("warm up")
-    attempts = []
-
-    def overloaded(text):
-        attempts.append(text)
-        raise errors.APIError(503, {"error": {"message": "overloaded"}})
-
-    chats[0].send_message = overloaded
-    assert "overloaded" in agent.run("play something")
-    assert len(attempts) == 2  # one try plus one retry

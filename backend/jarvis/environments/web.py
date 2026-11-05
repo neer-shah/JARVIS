@@ -1,21 +1,18 @@
-from google import genai
-from google.genai import types
-
 from .. import config
+from ..claude_chat import client
 from .base import Environment
 
 
 class Web(Environment):
-    """Live web lookups via Gemini's built-in Google Search grounding.
+    """Live web lookups via Anthropic's web search tool, run by a small Claude model.
 
-    Done as a separate, search-only model call because Gemini can't always mix the search
-    tool with our own function tools in a single request.
+    Done as a separate, search-only model call so the search tool is never mixed with our own function tools.
     """
 
     name = "web"
 
     def available(self):
-        return bool(config.GEMINI_API_KEY)
+        return bool(config.ANTHROPIC_API_KEY)
 
     def tools(self):
         def web_search(query: str) -> str:
@@ -26,15 +23,19 @@ class Web(Environment):
             Args:
                 query: A self-contained search question, e.g. 'weather in London today'.
             """
-            client = genai.Client(api_key=config.GEMINI_API_KEY)
-            resp = client.models.generate_content(
-                model=config.MODEL or "",
-                contents=f"Answer briefly (two sentences max) using web search: {query}",
-                config=types.GenerateContentConfig(
-                    tools=[types.Tool(google_search=types.GoogleSearch())],
-                    thinking_config=types.ThinkingConfig(thinking_budget=0),
-                ),
-            )
-            return resp.text or "I couldn't find anything."
+            messages = [{"role": "user", "content": f"Answer briefly (two sentences max) using web search: {query}"}]
+            for _ in range(3):  # a long search can pause; resend the turn so the server carries on
+                response = client().messages.create(
+                    model=config.AGENT_MODEL,
+                    max_tokens=2048,
+                    output_config={"effort": "low"},
+                    tools=[{"type": "web_search_20250305", "name": "web_search", "max_uses": 3}],
+                    messages=messages,
+                )
+                if response.stop_reason != "pause_turn":
+                    break
+                messages.append({"role": "assistant", "content": response.content})
+            text = "".join(block.text for block in response.content if block.type == "text").strip()
+            return text or "I couldn't find anything."
 
         return [web_search]

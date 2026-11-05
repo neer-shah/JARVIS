@@ -1,7 +1,8 @@
 from collections.abc import Callable
 from typing import Any
 
-from .. import config, llm
+from .. import config
+from ..claude_chat import ClaudeChat, safe
 from ..environments.base import Environment
 
 AGENT_RULES = """
@@ -45,7 +46,7 @@ class Agent:
     def tools(self) -> list[Callable[..., str]]:
         """The agent's tools, built once (some toolsets start background work when built)."""
         if self._tools is None:
-            self._tools = [llm.safe(fn, label=self.name) for fn in self.toolset.tools()]
+            self._tools = [safe(fn, label=self.name) for fn in self.toolset.tools()]
             names = {fn.__name__ for fn in self._tools}
             unknown = set(self.fast_tool_names) - names
             if unknown:
@@ -58,8 +59,8 @@ class Agent:
     def run(self, request: str) -> str:
         """Handle one request from JARVIS. History is kept, so follow-ups ("add five more") work."""
         if self._chat is None:
-            self._chat = llm.make_chat(self.system_prompt.strip() + "\n" + AGENT_RULES, self.tools(), config.AGENT_MODEL)
-        return llm.send(self._chat, request, who=self.name, retries=1)
+            self._chat = ClaudeChat(self.system_prompt.strip() + "\n" + AGENT_RULES, self.tools(), config.AGENT_MODEL)
+        return self._chat.send(request)
 
     def as_tool(self) -> Callable[[str], str]:
         """The single function JARVIS calls to delegate to this agent."""
