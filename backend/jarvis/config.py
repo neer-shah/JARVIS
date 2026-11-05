@@ -6,11 +6,7 @@ load_dotenv()
 
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 BRAIN_MODEL = "claude-opus-5-5"  # JARVIS's own model: routes each request
-
-GEMINI_API_KEY = os.getenv("GOOGLE_GENAI_API_KEY")
-MODEL = os.getenv("JARVIS_MODEL")
-
-AGENT_MODEL = os.getenv("JARVIS_AGENT_MODEL") or MODEL  # domain agents (Gemini); a small, fast model is ideal
+AGENT_MODEL = "claude-haiku-5-5"  # domain agents and web search: small, fast and cheap
 
 SYSTEM_PROMPT = """You are JARVIS, a concise, witty and loyal voice assistant, like the one from Iron Man.
 Your replies are spoken aloud, so keep them to one or two short sentences, with no markdown,

@@ -116,17 +116,20 @@ class Spotify(Environment):
 
         return wrapper
 
-    def _play(self, **target):
-        """start_playback on the chosen device. Retries a 404 (a just-launched app is still waking up)
-        and a 503 (Spotify's own transient overload), both of which usually clear within a few seconds."""
+    def _retrying(self, call):
+        """Runs a Spotify call, retrying a 404 (a just-launched app is still waking up) and a 503
+        (Spotify's own transient overload). Both usually clear within a few seconds."""
         for attempt in range(3):
             try:
-                return self.sp.start_playback(device_id=self._dev, **target)
+                return call()
             except Exception as e:
                 if getattr(e, "http_status", None) in (404, 503) and attempt < 2:
                     time.sleep(1.5 * (attempt + 1))
                     continue
                 raise
+
+    def _play(self, **target):
+        return self._retrying(lambda: self.sp.start_playback(device_id=self._dev, **target))
 
     # --- lookups ---------------------------------------------------------------------------
 
@@ -219,7 +222,7 @@ class Spotify(Environment):
             if want in LIKED_NAMES:
                 items = self.sp.current_user_saved_tracks(limit=50)["items"]
                 if items:
-                    self.sp.shuffle(True, device_id=self._dev)
+                    self._retrying(lambda: self.sp.shuffle(True, device_id=self._dev))
                     self._play(uris=[i["track"]["uri"] for i in items])
                     return "Playing your Liked Songs."
             match = self._best_playlist(want, self._my_playlists())

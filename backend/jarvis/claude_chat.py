@@ -1,22 +1,56 @@
-"""Claude as JARVIS's brain: a tool-use loop over plain Python functions.
+"""Claude for JARVIS: the brain and every domain agent share this tool-use loop over plain Python functions.
 
-The domain agents still use Gemini (see llm.py). Claude has no automatic function calling in the SDK,
-so this loop runs each tool the model asks for and sends the results back until it answers.
+Claude has no automatic function calling in the SDK, so ClaudeChat runs each tool the model asks for,
+sends the results back and repeats until the model answers.
 """
 
+import functools
 import re
+import time
 from collections.abc import Callable
+from datetime import datetime
 from typing import Any
 
 import anthropic
 from anthropic import beta_tool
 
 from . import config
-from .llm import stamp
 
 _ECHOED_STAMP = re.compile(r"^\s*\[[^\]]*\d{1,2}:\d{2}[^\]]*\]\s*")  # models sometimes copy our time stamp
 _BUSY_STATUS = (429, 500, 503, 529)  # rate limited or overloaded: usually clears up in a moment
 MAX_STEPS = 8  # tool rounds per request, so a confused model can't loop forever
+_client: anthropic.Anthropic | None = None
+
+
+def client() -> anthropic.Anthropic:
+    """One Anthropic client for the whole process."""
+    global _client
+    if _client is None:
+        _client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
+    return _client
+
+
+def stamp(text: str) -> str:
+    """Models don't know the time, so tell them with every message (saves a tool call)."""
+    return f"[Current local time: {datetime.now():%A %d %B %Y, %H:%M}]\n{text}"
+
+
+def safe(fn: Callable[..., str], label: str = "tool") -> Callable[..., str]:
+    """Log each tool call and turn exceptions into text the model can relay."""
+
+    @functools.wraps(fn)
+    def wrapper(*args: Any, **kwargs: Any) -> str:
+        started = time.perf_counter()
+        print(f"[{label}] {fn.__name__}({kwargs or args})")
+        try:
+            result = fn(*args, **kwargs)
+            print(f"[{label}] {fn.__name__} ok in {time.perf_counter() - started:.2f}s")
+            return result
+        except Exception as e:
+            print(f"[{label}] {fn.__name__} failed in {time.perf_counter() - started:.2f}s: {e!r}")
+            return f"Error: {e}"
+
+    return wrapper
 
 
 class ClaudeChat:
@@ -25,7 +59,7 @@ class ClaudeChat:
     def __init__(self, system_prompt: str, tools: list[Callable[..., str]], model: str):
         self.system_prompt = system_prompt
         self.model = model
-        self.client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
+        self.client = client()
         self.tools = {tool.name: tool for tool in (beta_tool(fn) for fn in tools)}
         self.schemas = [tool.to_dict() for tool in self.tools.values()]
         self.messages: list[dict[str, Any]] = []

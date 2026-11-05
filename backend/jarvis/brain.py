@@ -1,9 +1,9 @@
 from collections.abc import Callable
 
-from . import config, llm
+from . import config
 from .agents import Agent
 from .agents import discover as discover_agents
-from .claude_chat import ClaudeChat
+from .claude_chat import ClaudeChat, safe
 from .environments import discover as discover_environments
 from .environments.base import Environment
 
@@ -24,10 +24,10 @@ class Brain:
 
         tools: list[Callable[..., str]] = []
         for agent in self.agents:
-            tools.append(llm.safe(agent.as_tool(), label="agent"))
+            tools.append(safe(agent.as_tool(), label="agent"))
             tools.extend(agent.fast_tools())  # already wrapped by the agent
         for env in self.environments:
-            tools.extend(llm.safe(fn) for fn in env.tools())
+            tools.extend(safe(fn) for fn in env.tools())
 
         names = [fn.__name__ for fn in tools]
         duplicates = sorted({n for n in names if names.count(n) > 1})
